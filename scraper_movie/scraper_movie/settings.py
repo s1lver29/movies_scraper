@@ -7,11 +7,25 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
+import logging
+
 BOT_NAME = "scraper_movie"
 
 SPIDER_MODULES = ["scraper_movie.spiders"]
 NEWSPIDER_MODULE = "scraper_movie.spiders"
 
+LOG_ENABLED = True
+LOG_LEVEL = "INFO"
+LOG_FILE = "scrapy_movies.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("scrapy_movies.log", mode="a", encoding="utf-8"),
+    ],
+)
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = (
@@ -22,12 +36,12 @@ USER_AGENT = (
 ROBOTSTXT_OBEY = False
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
-# CONCURRENT_REQUESTS = 32
+# CONCURRENT_REQUESTS = 1
 
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-# DOWNLOAD_DELAY = 3
+# DOWNLOAD_DELAY = 10
 # The download delay setting will honor only one of:
 # CONCURRENT_REQUESTS_PER_DOMAIN = 16
 # CONCURRENT_REQUESTS_PER_IP = 16
@@ -68,7 +82,7 @@ DEFAULT_REQUEST_HEADERS = {
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
     "scraper_movie.pipelines.FilterPipeline": 1,
-    "scraper_movie.pipelines.MoviesSavePipeline": 2,
+    "scraper_movie.pipelines.MoviesSavePipeline": 300,
 }
 
 # Enable and configure the AutoThrottle extension (disabled by default)
