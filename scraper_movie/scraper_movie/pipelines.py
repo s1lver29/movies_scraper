@@ -5,10 +5,13 @@
 
 
 # useful for handling different item types with a single interface
-from itemadapter import ItemAdapter
 import csv
 import logging
+from atexit import register
 from re import match, sub
+
+from itemadapter import ItemAdapter
+from scrapy import Spider
 
 
 class FilterPipeline:
@@ -17,25 +20,26 @@ class FilterPipeline:
         self.logger = logging.getLogger(__name__)
 
     def process_item(self, item, spider):
+        adapter = ItemAdapter(item)
         self.logger.debug("Start cleaning data for movie: %s", item.get("title"))
 
-        item["title"] = self.clean_title(item.get("title", ""))
-        item["genre"] = self.clean_list(item.get("genre", []))
-        item["director"] = self.clean_list(item.get("director", []))
-        item["country"] = self.clean_list(item.get("country", []))
-        item["year"] = self.extract_max_year(item.get("year", []))
+        adapter["title"] = self.clean_title(adapter.get("title", ""))
+        adapter["genre"] = self.clean_list(adapter.get("genre", []))
+        adapter["director"] = self.clean_list(adapter.get("director", []))
+        adapter["country"] = self.clean_list(adapter.get("country", []))
+        adapter["year"] = self.extract_max_year(adapter.get("year", []))
 
-        self.logger.info("Cleaned data: %s", item)
+        self.logger.info("Cleaned data: %s", adapter.asdict())
 
-        return item
+        return adapter.item
 
     def clean_title(self, value):
         """Очищает название, превращая список в строку"""
         if isinstance(value, list):
             clean_value = " ".join(value).strip()
-            self.logger.debug("Cleaned title: %s", clean_value)
-            return clean_value
-        clean_value = value.strip()
+        else:
+            clean_value = value.strip()
+
         self.logger.debug("Cleaned title: %s", clean_value)
         return clean_value
 
@@ -58,12 +62,13 @@ class FilterPipeline:
     def extract_max_year(self, values):
         """Извлекает только год и выбирает максимальный"""
         years = [int(y) for y in values if y.isdigit() and 1800 <= int(y) <= 2100]
-        if years:
-            max_year = max(years)
+        max_year = max(years, default=None)
+        if max_year:
             self.logger.debug("Extracted max year: %d", max_year)
-            return max_year
-        self.logger.warning("No valid years found. Returning None.")
-        return None
+        else:
+            self.logger.warning("No valid years found. Returning None.")
+
+        return max_year
 
 
 class MoviesSavePipeline:
@@ -79,7 +84,9 @@ class MoviesSavePipeline:
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
-    def process_item(self, item, spider):
+        register(self.close_file)
+
+    def process_item(self, item: dict, spider: Spider) -> dict:
         """Записывает данные в файл."""
         self.logger.info(f"Writing movie to file: {item['title']}")
 
@@ -94,7 +101,13 @@ class MoviesSavePipeline:
 
         return item
 
-    def close_spider(self, spider):
-        """Закрытие файла после окончания парсинга"""
+    def close_spider(self, spider: Spider):
+        """Закрытие файла после окончания парсинга."""
         self.logger.info("Closing file and spider.")
-        self.file.close()
+        self.close_file()
+
+    def close_file(self):
+        """Гарантированное закрытие файла даже при аварийном завершении."""
+        if not self.file.closed:
+            self.logger.info("Closing file due to script exit.")
+            self.file.close()

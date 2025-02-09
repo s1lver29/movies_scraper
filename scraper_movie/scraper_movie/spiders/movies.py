@@ -1,13 +1,44 @@
+from typing import Generator
+
 import scrapy
+from scrapy.http import Response
+
 from ..items import ScraperMovieItem
 
 
 class MoviesSpider(scrapy.Spider):
-    name = "movies"
-    allowed_domains = ["ru.wikipedia.org"]
-    start_urls = ["https://ru.wikipedia.org/wiki/Категория:Фильмы_по_алфавиту"]
+    name: str = "movies"
+    allowed_domains: list[str] = ["ru.wikipedia.org"]
 
-    def parse(self, response):
+    BASE_PATH: str = "//table[contains(@class, 'infobox')]"
+
+    XPATHS: dict[str, str] = {
+        "title": f"{BASE_PATH}//th[@class='infobox-above']/text() | {BASE_PATH}//th[@class='infobox-above']//span//text()",
+        "genre": f"""
+            {BASE_PATH}//th[contains(., 'Жанр') or contains(., 'Жанры')]/following-sibling::td//a/text() |
+            {BASE_PATH}//th[contains(., 'Жанр') or contains(., 'Жанры')]/following-sibling::td//span[contains(@class, "no-wikidata")]/text()
+            """.strip(),
+        "director": f"""
+            {BASE_PATH}//th[contains(text(), 'Режиссёр') or contains(text(), 'Режиссёры')]/following-sibling::td//a//text() |
+            {BASE_PATH}//th[contains(text(), 'Режиссёр') or contains(text(), 'Режиссёры')]/following-sibling::td//span[contains(@class, "no-wikidata")]//text()
+            """.strip(),
+        "country": f"""
+            {BASE_PATH}//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td//a/text() |
+            {BASE_PATH}//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td//span[@data-sort-value]/@data-sort-value |
+            {BASE_PATH}//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td//span[contains(@class, "no-wikidata")]/text() |
+            {BASE_PATH}//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td/text()
+            """.strip(),
+        "year": f"""
+            {BASE_PATH}//th[contains(text(), 'Год') or contains(text(), 'Дата')]/following-sibling::td//text() |
+            {BASE_PATH}//th[contains(text(), 'Год') or contains(text(), 'Дата')]/following-sibling::td//a[contains(@title, 'год')]//text()
+            """.strip(),
+    }
+
+    def start_requests(self) -> Generator[scrapy.Request, None, None]:
+        start_url = "https://ru.wikipedia.org/wiki/Категория:Фильмы_по_алфавиту"
+        yield scrapy.Request(url=start_url, callback=self.parse)
+
+    def parse(self, response: Response) -> Generator[scrapy.Request, None, None]:
         category_block = response.xpath(
             "//h2[contains(text(), 'Фильмы по алфавиту')]/following-sibling::div[@class='mw-content-ltr'][1]"
         )
@@ -17,69 +48,35 @@ class MoviesSpider(scrapy.Spider):
         for movie in category_block.xpath(
             ".//div[@class='mw-category-group']//ul/li/a"
         ):
-            movie_link = response.urljoin(movie.attrib["href"])
-            self.logger.info(f"Found movie link: {movie_link}")
+            self.logger.info(
+                f"Found movie link: {response.urljoin(movie.attrib['href'])}"
+            )
 
-            yield response.follow(movie_link, self.parse_movie)
+            yield response.follow(movie.attrib["href"], self.parse_movie)
 
         next_page = response.xpath(
             "//a[contains(text(), 'Следующая страница')]/@href"
         ).get()
         if next_page:
-            next_page_url = response.urljoin(next_page)
-            self.logger.info(f"Following next page: {next_page_url}")
+            self.logger.info(f"Following next page: {response.urljoin(next_page)}")
 
-            yield response.follow(next_page_url, self.parse)
+            yield response.follow(next_page, self.parse)
 
-    def parse_movie(self, response):
+    def parse_movie(
+        self, response: Response
+    ) -> Generator[ScraperMovieItem, None, None]:
         item = ScraperMovieItem()
 
-        item["title"] = self.extract_text(
-            response,
-            """
-            //table[contains(@class, 'infobox')]//th[@class='infobox-above']/text() |
-            //table[contains(@class, 'infobox')]//th[@class='infobox-above']//span//text()
-            """.strip(),
-            "title",
-        )
-        item["genre"] = self.extract_text(
-            response,
-            """
-            //table[contains(@class, 'infobox')]//th[contains(., 'Жанр') or contains(., 'Жанры')]/following-sibling::td//a/text() |
-            //table[contains(@class, 'infobox')]//th[contains(., 'Жанр') or contains(., 'Жанры')]/following-sibling::td//span[contains(@class, "no-wikidata")]/text()
-            """.strip(),
-            "genre",
-        )
-        item["director"] = self.extract_text(
-            response,
-            """
-            //table[contains(@class, 'infobox')]//th[contains(text(), 'Режиссёр') or contains(text(), 'Режиссёры')]/following-sibling::td//a//text() |
-            //table[contains(@class, 'infobox')]//th[contains(text(), 'Режиссёр') or contains(text(), 'Режиссёры')]/following-sibling::td//span[contains(@class, "no-wikidata")]//text()
-            """.strip(),
-            "director",
-        )
-        item["country"] = self.extract_text(
-            response,
-            """
-            //table[contains(@class, 'infobox')]//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td//a/text() |
-            //table[contains(@class, 'infobox')]//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td//span[@data-sort-value]/@data-sort-value |
-            //table[contains(@class, 'infobox')]//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td//span[contains(@class, "no-wikidata")]/text() |
-            //table[contains(@class, 'infobox')]//th[contains(text(), "Страна") or contains(text(), "Страны")]/following-sibling::td/text()
-            """.strip(),
-            "country",
-        )
-        item["year"] = self.extract_text(
-            response,
-            """
-            //table[contains(@class, 'infobox')]//th[contains(text(), 'Год') or contains(text(), 'Дата')]/following-sibling::td//text() |
-            //table[contains(@class, 'infobox')]//th[contains(text(), 'Год') or contains(text(), 'Дата')]/following-sibling::td//a[contains(@title, 'год')]//text()
-            """.strip(),
-            "year",
-        )
+        for item_values in self.XPATHS.keys():
+            item[item_values] = self.extract_text(
+                response, self.XPATHS[item_values], item_values
+            )
 
         yield item
 
-    def extract_text(self, response, xpath, field_name):
+    def extract_text(
+        self, response: Response, xpath: str, field_name: str
+    ) -> list[str]:
         self.logger.debug(f"Extracting {field_name} using xpath: {xpath}")
 
         extracted = response.xpath(xpath).getall()
