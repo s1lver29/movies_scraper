@@ -8,15 +8,18 @@
 import csv
 import logging
 from atexit import register
-from re import match, sub
+from re import compile, match, sub
 
 from itemadapter import ItemAdapter
 from scrapy import Spider
 
+from .items import ScraperMovieItem
+
 
 class FilterPipeline:
     def __init__(self):
-        logging.basicConfig(level=logging.DEBUG)
+        pass
+        logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
     def process_item(self, item, spider):
@@ -34,7 +37,9 @@ class FilterPipeline:
         return adapter.item
 
     def clean_title(self, value):
-        """Очищает название, превращая список в строку"""
+        """Cleans the title by converting a list to a string."""
+        self.logger.debug("Processing clening title: %s", value)
+
         if isinstance(value, list):
             clean_value = " ".join(value).strip()
         else:
@@ -44,7 +49,8 @@ class FilterPipeline:
         return clean_value
 
     def clean_list(self, values):
-        """Удаляет мусор и возвращает список значений."""
+        """emoves unnecessary characters and returns a cleaned list of values."""
+        self.logger.debug("Processing cleaning list: %s", values)
         if not isinstance(values, list):
             values = [values]
 
@@ -60,8 +66,16 @@ class FilterPipeline:
         return cleaned_values
 
     def extract_max_year(self, values):
-        """Извлекает только год и выбирает максимальный"""
-        years = [int(y) for y in values if y.isdigit() and 1800 <= int(y) <= 2100]
+        """Extracts the year and returns the maximum one."""
+        self.logger.debug("Processing extract year: %s", values)
+
+        year_pattern = compile(r"\b(?:15|16|17|18|19|20)\d{2}\b")
+
+        years = []
+        for value in values:
+            found_years = year_pattern.findall(value)
+            years.extend(map(int, found_years))
+
         max_year = max(years, default=None)
         if max_year:
             self.logger.debug("Extracted max year: %d", max_year)
@@ -76,7 +90,7 @@ class MoviesSavePipeline:
         self.file = open("movies.csv", mode="w+", newline="", encoding="utf-8")
         self.writer = csv.DictWriter(
             self.file,
-            fieldnames=["title", "genre", "director", "country", "year"],
+            fieldnames=ScraperMovieItem.fields.keys(),
             delimiter=";",
         )
         self.writer.writeheader()
@@ -87,12 +101,11 @@ class MoviesSavePipeline:
         register(self.close_file)
 
     def process_item(self, item: dict, spider: Spider) -> dict:
-        """Записывает данные в файл."""
+        """Writes data to a file."""
         self.logger.info(f"Writing movie to file: {item['title']}")
 
         try:
             self.writer.writerow(item)
-            self.file.flush()
             self.logger.debug(f"Movie written to file: {item['title']}")
         except Exception as e:
             self.logger.error(
@@ -102,12 +115,12 @@ class MoviesSavePipeline:
         return item
 
     def close_spider(self, spider: Spider):
-        """Закрытие файла после окончания парсинга."""
+        """Closes the file after the spider finishes processing."""
         self.logger.info("Closing file and spider.")
         self.close_file()
 
     def close_file(self):
-        """Гарантированное закрытие файла даже при аварийном завершении."""
+        """Ensures the file is closed even if the script exits unexpectedly."""
         if not self.file.closed:
             self.logger.info("Closing file due to script exit.")
             self.file.close()
