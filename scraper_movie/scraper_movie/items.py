@@ -13,3 +13,7 @@ class ScraperMovieItem(scrapy.Item):
     country = scrapy.Field()
     year = scrapy.Field()
     imdb_rating = scrapy.Field()
+class MovieReviewItem(scrapy.Item):
+    review = scrapy.Field()
+    reviewer = scrapy.Field()
+    movie_title = scrapy.Field()
