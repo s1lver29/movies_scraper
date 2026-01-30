@@ -1,7 +1,4 @@
-class SumCalculator:
-    def __init__(self, a, b):
-        self.a = a
-        self.b = b
-
-    def total(self):
-        return self.a + self.b
+def _validate_inputs(self, numbers):
+        for number in numbers:
+            if not isinstance(number, (int, float)):
+                raise TypeError(f'Expected int or float, got {type(number).__name__}')
