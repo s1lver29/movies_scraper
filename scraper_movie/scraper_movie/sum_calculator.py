@@ -7,6 +7,7 @@ class SumCalculator:
         self.validate_numbers()
         self.validate_numbers()
         self._numbers = []
+        self.validate_numbers()
         if numbers:
             self.add_numbers(numbers)
 
@@ -23,7 +24,7 @@ class SumCalculator:
         self._numbers.append(number)
         if not isinstance(number, (int, float)):
             raise TypeError(f"Expected int or float, got {type(number).__name__}")
-        self.numbers.append(number)
+        # The above line is redundant due to the add_number function adding numbers to self._numbers
 
     def clear(self) -> None:
         self.numbers = []
@@ -37,6 +38,8 @@ class SumCalculator:
 
     def __repr__(self) -> str:
         return f'SumCalculator(numbers={self.numbers})'def validate_numbers(self) -> None:
+        if not self._numbers:
+            return
         for number in self._numbers:
             if not isinstance(number, (int, float)):
                 raise TypeError(f"Expected int or float, but got {type(number).__name__}")
